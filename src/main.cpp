@@ -3,15 +3,34 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "Eigen-3.3/Eigen/Core"
-#include "Eigen-3.3/Eigen/QR"
-#include "helpers.h"
+// #include <algorithm>
+// #include "Eigen-3.3/Eigen/Core"
+// #include "Eigen-3.3/Eigen/QR"
+// #include "helpers.h"
 #include "json.hpp"
+// #include "spline.h"
+#include "pathplanner.h"
 
 // for convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
+
+// Checks if the SocketIO event has JSON data.
+// If there is data the JSON object in string format will be returned,
+//   else the empty string "" will be returned.
+string hasData(string s) {
+  auto found_null = s.find("null");
+  auto b1 = s.find_first_of("[");
+  auto b2 = s.find_first_of("}");
+  if (found_null != string::npos) {
+    return "";
+  } else if (b1 != string::npos && b2 != string::npos) {
+    return s.substr(b1, b2 - b1 + 2);
+  }
+  return "";
+}
+
 
 int main() {
   uWS::Hub h;
@@ -49,9 +68,14 @@ int main() {
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
-
+  bool car_starts = true;
+//   initialize planner with waypoints
+  PathPlanner planner;
+  planner.Init(map_waypoints_x, map_waypoints_y, map_waypoints_s,
+            map_waypoints_dx, map_waypoints_dy);
+  
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
+               &map_waypoints_dx,&map_waypoints_dy, &car_starts, &planner]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -97,8 +121,17 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
-
-
+  
+//   update all car variables
+          planner.UpdatePlanner(previous_path_x, previous_path_y, end_path_s, end_path_d, car_x, car_y, 
+                  car_s, car_d, car_yaw, car_speed, sensor_fusion);
+//     plan path
+          planner.PlanPath();
+//    update next_vals
+          NextVals nextVals = planner.nextVals;
+          next_x_vals = nextVals.next_x_vals;
+          next_y_vals = nextVals.next_y_vals;
+       
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
