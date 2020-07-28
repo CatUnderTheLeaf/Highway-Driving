@@ -48,9 +48,11 @@ class PathPlanner {
   float calculate_cost(const int& lane);
   float speed_cost(const int& lane);
   float safety_cost(const int& lane);
+  float change_lane_cost(const int& lane);
   float lane_speed(const int& lane);
+  
   vector <int> getLanes();
-  bool SenseCars(int path_size);
+  void SenseCars(int path_size);
 //   plan path
   void PlanPath();
   
@@ -58,8 +60,10 @@ class PathPlanner {
   NextVals nextVals;
 //   car lane
   int target_lane = 1;
-  double ref_vel = 0;
+  double ref_vel = 0.1;
   double vel_max = 49.5;
+  string state = "KL";
+  bool is_at_vel_max = false;
   
  private:
   vector<double> map_waypoints_x;
@@ -83,7 +87,7 @@ class PathPlanner {
   nlohmann::json sensor_fusion;
   double dt = 0.02;  
   tk::spline spl;
-  
+  bool too_close = false;
   double safe_dist = 30;
 };
 

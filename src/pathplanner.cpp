@@ -142,11 +142,11 @@ float PathPlanner::lane_speed(const int& lane) {
   double avg_speed = 0;
   int num = 0;
   for (int i = 0; i < other_cars.size(); ++i) {
-//     another car is in visible range with our car, 
-    bool in_range = (other_cars[i].s < car.s + 2*safe_dist) || (other_cars[i].s > car.s);
-    if (other_cars[i].lane == lane && in_range)
+//     another car is in visible range with our car, and in target lane 
+    if ((other_cars[i].lane) == lane && (fabs(other_cars[i].s - car.s) < safe_dist)) {
       avg_speed += other_cars[i].speed;
       ++num;
+    }
   }
   if (num) {
     return avg_speed/num;
@@ -163,77 +163,95 @@ float PathPlanner::speed_cost(const int& lane) {
 
   float final_speed = lane_speed(lane);
   float cur_speed = lane_speed(car.lane);
-//  TODO maybe also use function lane_speed instead of car.speed    
-//   float cost = (2.0*vel_max - car.speed - final_speed)/vel_max;
   float cost = (2.0*vel_max - cur_speed - final_speed)/vel_max;
 
   return cost;
 }   
 
+// cost for gap between cars
 float PathPlanner::safety_cost(const int& lane) {
   float cost = 0.0;
+  int path_size = previous_path_x.size();    
   for (int i = 0; i < other_cars.size(); ++i) {
-    if (other_cars[i].lane == lane) {
-//     another car is in unsafe range with our car, 
-      bool in_range = (other_cars[i].s < car.s + safe_dist) || (other_cars[i].s > car.s - safe_dist);
+    //     another car is in unsafe range with our car in target lane
+    double check_car_s = other_cars[i].s + ((double)path_size*dt*other_cars[i].speed);
+//     if ((other_cars[i].lane == lane) && (fabs(check_car_s - car.s) < safe_dist * vel_max / ref_vel)) {
+    if ((other_cars[i].lane == lane) && (fabs(other_cars[i].s - car.s) < safe_dist)) {
       cost += 1.0;
     }
   }
   return cost;
 }
-  
+
+// cost for changing lanes
+float PathPlanner::change_lane_cost(const int& lane) {
+  if (car.lane == lane) {
+     return 0;
+  } else {
+    return 1;
+  }
+}
+
 // Sum weighted cost functions to get total cost
 float PathPlanner::calculate_cost(const int& lane) {
   // Sum weighted cost functions to get total cost for trajectory.
   float cost = 0.0;
 
-  std::cout << ", cost to go: speed: " << speed_cost(lane) << ", safety: "<< safety_cost(lane) << std::endl;
-  cost += speed_cost(lane) + safety_cost(lane);
+  std::cout << ", cost to go: speed: " << speed_cost(lane) << ", safety: " << safety_cost(lane)  << ", change_lane: " << change_lane_cost(lane) << std::endl;
+  cost += speed_cost(lane) + safety_cost(lane) + change_lane_cost(lane);
 
   return cost;
 }  
   
 //   analize data from Sensor Fusion and make decisions
-bool PathPlanner::SenseCars(int path_size) {
+void PathPlanner::SenseCars(int path_size) {
   if (path_size > 0) {
     car.s = end_path_s;
   }
-  bool too_close = false;
-  if (car.lane == target_lane) {
-    for (int i = 0; i < other_cars.size(); ++i) {
-  //     another car is in the same lane as our car
-      if (car.lane == other_cars[i].lane) {
-        double check_car_s = other_cars[i].s + ((double)path_size*dt*other_cars[i].speed);
-  //       if another car is ahead of our car and is slower
-  //       TODO maybe compare with ref_vel instead??
-        if ((check_car_s > car.s) && (check_car_s - car.s) < safe_dist) {
-          std::cout << "Car is ahead and is too close" << std::endl; 
-          too_close = true;
-
-          if ((other_cars[i].speed < car.speed)) {
-            std::cout << "Car is ahead and is slow" << std::endl; 
+  too_close = false;
+  if (state == "KL") {
     //      get all possible lanes for our car movement
-            vector <int> lanes = getLanes();
-    //         for each possible lane calculate costs and select best lane
-            int best_lane = car.lane;
-            float min_cost = 999999;
-            for (int j = 0; j < lanes.size(); ++j) {
-              std::cout << lanes[j];
-              float cost = calculate_cost(lanes[j]);
-               
-              if (cost < min_cost) {
-                min_cost = cost;
-                best_lane = lanes[j];
-              }
-            }
-            std::cout << std::endl; 
-            target_lane = best_lane; 
-          }
-        }
-      }            
+    vector <int> lanes = getLanes();
+    //      for each possible lane calculate costs and select best lane
+    int best_lane = car.lane;
+    float min_cost = 999999;
+    for (int j = 0; j < lanes.size(); ++j) {
+      std::cout << lanes[j];
+      float cost = calculate_cost(lanes[j]);
+
+      if (cost < min_cost) {
+        min_cost = cost;
+        best_lane = lanes[j];
+      }
+    }
+    std::cout << std::endl; 
+    target_lane = best_lane; 
+    std::cout << "target_lane" << target_lane << std::endl; 
+    if (target_lane == car.lane) {
+      state = "KL";
+    } else {
+      state = "ChL";
     }
   }
-  return too_close;  
+  //       if state == "ChL"
+  else {
+    if (target_lane == car.lane) {
+      state = "KL";
+      too_close = true;
+    } else {
+      state = "ChL";
+    }
+  }
+  
+  for (int i = 0; i < other_cars.size(); ++i) {
+    double check_car_s = other_cars[i].s + ((double)path_size*dt*other_cars[i].speed);
+//     if a car is in our lane, is ahead in some range and is slower then our carwe should slow down
+    if ((car.lane == other_cars[i].lane) && (check_car_s > car.s) && ((check_car_s - car.s) < safe_dist) && (other_cars[i].speed < car.speed)) {
+      
+      too_close = true;
+    }
+  }
+
 }
 
 //   plan path
@@ -247,12 +265,17 @@ void PathPlanner::PlanPath() {
   double pos_y = poses[1];  
   double angle = poses[2];
 
-  bool too_close = SenseCars(path_size);
+  if (is_at_vel_max) {
+    SenseCars(path_size);
+  }
   
   if (too_close) {
     ref_vel -= .224;
   } else if (ref_vel < vel_max) {
     ref_vel += .224;
+    if ((is_at_vel_max == false) && (ref_vel > vel_max)) {
+      is_at_vel_max = true;
+    }
   } 
  //  Fill nextVals with values from previous path 
   FillFromPreviousPath(path_size);

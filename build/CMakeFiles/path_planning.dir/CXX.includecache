@@ -836,6 +836,22 @@ valarray
 vector
 -
 
+/home/workspace/CarND-Path-Planning-Project/src/main.cpp
+uWS/uWS.h
+-
+fstream
+-
+iostream
+-
+string
+-
+vector
+-
+json.hpp
+/home/workspace/CarND-Path-Planning-Project/src/json.hpp
+pathplanner.h
+/home/workspace/CarND-Path-Planning-Project/src/pathplanner.h
+
 /home/workspace/CarND-Path-Planning-Project/src/pathplanner.cpp
 pathplanner.h
 /home/workspace/CarND-Path-Planning-Project/src/pathplanner.h
