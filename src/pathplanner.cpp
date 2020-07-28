@@ -170,14 +170,16 @@ float PathPlanner::speed_cost(const int& lane) {
 
 // cost for gap between cars
 float PathPlanner::safety_cost(const int& lane) {
-  float cost = 0.0;
+  double cost = 0.0;
   int path_size = previous_path_x.size();    
   for (int i = 0; i < other_cars.size(); ++i) {
     //     another car is in unsafe range with our car in target lane
     double check_car_s = other_cars[i].s + ((double)path_size*dt*other_cars[i].speed);
 //     if ((other_cars[i].lane == lane) && (fabs(check_car_s - car.s) < safe_dist * vel_max / ref_vel)) {
     if ((other_cars[i].lane == lane) && (fabs(other_cars[i].s - car.s) < safe_dist)) {
-      cost += 1.0;
+//       cost += 1.0;
+//       cost is higher when other car is closer to our car
+      cost = std::max(cost, (safe_dist-fabs(other_cars[i].s - car.s))/safe_dist);
     }
   }
   return cost;
